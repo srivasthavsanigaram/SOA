@@ -1,0 +1,23 @@
+During the upgrade process the weblogic(SOA, OSB) from 12.2.1.3 to 12.2.1.4, while proceeding with schema upgrade, the following queries are executed to check for closed/open instances count:
+
+Closed/Aborted:
+select count(s.flow_id) from sca_flow_instance s
+where s.active_component_instances= 0 and s.created_time >= to_timestamp('2011-09-01','YYYY-MM-DD') 
+and s.created_time <= to_timestamp('2023-08-31','YYYY-MM-DD') 
+and s.updated_time<= to_timestamp('2023-08-31','YYYY-MM-DD');
+
+Open:
+select count(s.flow_id) from sca_flow_instance s 
+where s.active_component_instances> 0 
+and s.created_time >= to_timestamp('2011-09-01','YYYY-MM-DD') 
+and s.created_time <= to_timestamp('2023-08-31','YYYY-MM-DD') 
+and s.updated_time<= to_timestamp('2023-08-31','YYYY-MM-DD');
+
+Which instance count it will give by using the below query, where active_component_instances has negative value?
+select count(s.flow_id) from sca_flow_instance s 
+where s.active_component_instances< 0 
+and s.created_time >= to_timestamp('2011-09-01','YYYY-MM-DD') 
+and s.created_time <= to_timestamp('2023-08-31','YYYY-MM-DD') 
+and s.updated_time<= to_timestamp('2023-08-31','YYYY-MM-DD');
+
+The negative value of active_component_instances signifies closed instances, which are ready for purging.
