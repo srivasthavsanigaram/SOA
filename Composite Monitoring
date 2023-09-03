@@ -1,0 +1,110 @@
+CUBE_INSTANCE
+COMPOSITE_INSTANCE
+SCA_SENSOR_VALUE
+
+COMPOSITE_INSTANCE
+Below are the important columns in composite instance tables.
+
+                           ECID: Unique values for one end-to-end transactions across several tables.
+                           ID: Instance ID that is visible in Enterprise Manager Console
+                           PARENT_ID: This will be null for initiator composite and child composite will have the value of parent composite
+                           COMPOSITE_DN: Composite name along with partition name
+                           STATE: State of the instance like completed, running etc which is explained in details
+                           CREATED_TIME: Creation time of an instance
+
+CUBE_INSTANCE
+Below are the important columns in cube_instance tables.
+
+   CIKEY: Unique value for an instance
+   CREATION_DATE: Creation date
+   STATE: State of Instance
+   STATUS: Status of Instance
+   ECID: Unique hexadecimal id for the end to end transaction
+   COMPOSITE_NAME: Name of composite
+   DOMAIN_NAME: Partition Name
+   COMPONENT_NAME: Name of component
+   COMPOSITE_REVISION: Revision Number of composites
+
+SCA_SENSOR_VALUE
+Below are the important columns in composite instance tables.
+                                  COMPOSITE_ID: Instance ID that is visible in EM console or Value of ID in the composite_instance                                                                                                        table
+                                  COMPONENT_NAME: Name of the component
+                                  SENSOR_NAME: Name of the sensors
+                                  PARTITION_DATE: Creation date
+                                  STRING_VALUE: Sensor value in String datatype
+                                  NUMBER_VALUE: Sensor value in Number datatype
+                                  DATE_VALUE: Sensor value in Date datatype
+                                  CLOB_VALUE: Sensor value in CLOB datatype
+                                  BLOB_VALUE: Sensor value in Blob datatype
+Other Tables of SOA  dehydration stores, that we use to extract the details of instances, like:
+DLV_MESSAGE
+ Stores incoming (invocation) and callback messages upon receipt. This table only stores the metadata for a message (for example, current state, process identifier, and receive date).
+XML_DOCUMENT
+Stores all large objects in the system (for example, dlv_message documents). This table stores the data as binary large objects (BLOBs). Separating the document storage from the metadata enables the metadata to change frequently without being impacted by the size of the documents.
+
+AUDIT_TRAIL
+Stores the audit trail for instances. The audit trail viewed in Oracle BPEL Control is created from an XML document. As an instance is processed, each activity writes events to the audit trail as XML.
+
+
+
+## Query to get the count of instances on different state  ##
+SELECT COUNT(*),
+DECODE(cube_instance.STATE, 0, 'Initiated', 1, 'Running', 2, 'Suspended', 3, 'Faulted', 4, 'Closed Pending', 5, 'Closed Completed', 6, 'Closed Faulted', 7, 'Closed Cancelled', 8, 'Closed Aborted', 9, 'Closed Stale', 10,'Closed Rolled Back','unknown') state
+FROM CUBE_INSTANCE
+WHERE creation_date > TRUNC(sysdate)-1
+AND creation_date < sysdate
+GROUP BY STATE;
+
+
+#to get the same details on composite wise  ##
+SELECT COUNT(*),
+DECODE(CUBE_INSTANCE.STATE, 0, 'Initiated', 1, 'Running', 2, 'Suspended', 3, 'Faulted', 4, 'Closed Pending', 5, 'Closed Completed', 6, 'Closed Faulted', 7, 'Closed Cancelled', 8, 'Closed Aborted', 9, 'Closed Stale', 10,'Closed Rolled Back','unknown') STATE ,
+COMPOSITE_NAME
+FROM CUBE_INSTANCE
+WHERE CREATION_DATE > TRUNC(sysdate)-1
+AND CREATION_DATE < SYSDATE
+GROUP BY STATE,
+COMPOSITE_NAME
+ORDER BY COMPOSITE_NAME;
+
+## Query to find Payload of a composite  ##
+SELECT A.DOCUMENT FROM XML_DOCUMENT A,INSTANCE_PAYLOAD B,COMPOSITE_INSTANCE C WHERE A.DOCUMENT_ID = B.PAYLOAD_KEY AND B.INSTANCE_ID = C.ID AND B.INSTANCE_TYPE='COMPOSITE' AND A.DOCUMENT_TYPE = 2 AND B.INSTANCE_ID = <<InstanceNumber>>;
+
+## Query to  display instance id of all composites ##
+SELECT  * FROM  SCA_FLOW_INSTANCE;
+
+##  To  delete  instances   not in Recovery  or  Running  state  ##
+declare
+begin
+soa.delete_instances(
+min_creation_date => to_timestamp('2018-08-01','YYYY-MM-DD'),
+max_creation_date => to_timestamp('2018-08-31','YYYY-MM-DD'),
+retention_period => to_timestamp('2018-08-31','YYYY-MM-DD')
+);
+end;
+
+## To  extract   the CLOB  of the Payload  for the  instance in the suspending canceled state   ##
+SELECT sn.CLOB_VALUE ,
+sn.PARTITION_DATE ,
+sn.FLOW_ID ,
+sn.COMPOSITE_ID ,
+ci.FLOW_ID ,
+ci.CREATION_DATE
+FROM SCA_SENSOR_VALUE sn,
+CUBE_INSTANCE ci
+WHERE sn.COMPONENT_NAME ='OSB_refPersonne'
+AND ci.CREATION_DATE >= TO_TIMESTAMP('2018-09-30 05:04:00','YYYY-MM-DD HH24:MI:SS') AND ci.CREATION_DATE <= TO_TIMESTAMP('2018-09-30 05:20:00' ,'YYYY-MM-DD HH24:MI:SS')
+AND sn.FLOW_ID=ci.FLOW_ID
+AND ci.STATE=4;
+
+## To  extract the failed  instances  for the ‘composite_name’ ##
+SELECT *
+FROM XML_DOCUMENT XMLDOC , DLV_MESSAGE DLV,DOCUMENT_DLV_MSG_REF DLVREF
+WHERE DLVREF.MESSAGE_GUID=DLV.MESSAGE_GUID
+AND XMLDOC.DOCUMENT_ID=DLVREF.DOCUMENT_ID
+AND DLVREF.DLV_PARTITION_DATE >= TO_TIMESTAMP('2023-08-02 05:05:00','YYYY-MM-DD HH24:MI:SS') AND DLVREF.DLV_PARTITION_DATE <= TO_TIMESTAMP('2023-08-02 05:20:00' ,'YYYY-MM-DD HH24:MI:SS')
+AND DLV.RECEIVE_DATE=DLVREF.DLV_PARTITION_DATE
+AND DLV.COMPOSITE_NAME='composite_name'
+AND DLV.STATE=0;
+
+
